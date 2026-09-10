@@ -9,7 +9,7 @@ if not os.path.exists(IMAGE_DIR):
   os.makedirs(IMAGE_DIR)
 
 # 관리자 비밀번호 설정 (필요시 변경하세요)
-ADMIN_PASSWORD = "jh0109"
+ADMIN_PASSWORD = "1234"
 
 
 def load_data():
@@ -31,15 +31,9 @@ data = load_data()
 st.title("🏎️ 카트라이더 타임어택 랭킹 판")
 st.write("친구들과 함께 기록과 인증샷을 등록하고 순위를 경쟁해보세요!")
 
+# 사이드바 메뉴 (관리자 전용 맵 삭제 제거, 일반 기록 삭제만 남김)
 menu = st.sidebar.selectbox(
-    "메뉴 선택",
-    [
-        "전체 순위 보기",
-        "기록 입력",
-        "새 맵 추가",
-        "기록 삭제 (본인/관리자)",
-        "관리자 모드 (맵 삭제)",
-    ],
+    "메뉴 선택", ["전체 순위 보기", "기록 입력", "새 맵 추가", "기록 삭제"]
 )
 
 if menu == "전체 순위 보기":
@@ -164,21 +158,113 @@ elif menu == "새 맵 추가":
         save_data(data)
         st.success(f"🏁 '{new_map_name}' 맵이 성공적으로 추가되었습니다!")
 
-elif menu == "기록 삭제 (본인/관리자)":
+elif menu == "기록 삭제":
   st.header("🗑️ 기록 삭제 센터")
-  st.write(
-      "원하는 삭제 방식을 선택하세요. (본인 이름으로 삭제 또는 관리자"
-      " 비밀번호로 전체 삭제)"
+
+  # 상단에 관리자 비밀번호 입력란 배치
+  st.subheader("🛡️ 관리자 로그인 (선택사항)")
+  admin_password_input = st.text_input(
+      "관리자 비밀번호를 입력하면 맵 삭제 및 전체 기록 관리 기능이 열립니다.",
+      type="password",
   )
 
-  delete_mode = st.radio(
-      "삭제 방식 선택", ["내 기록 삭제 (일반)", "관리자 모드로 삭제"]
-  )
+  # 관리자 로그인 성공 여부 확인
+  is_admin = admin_password_input == ADMIN_PASSWORD
 
-  if not data:
-    st.info("등록된 데이터가 없습니다.")
+  if admin_password_input != "" and not is_admin:
+    st.error("비밀번호가 틀렸습니다. (일반 삭제 모드로 작동합니다)")
+
+  if is_admin:
+    st.success(
+        "🎉 관리자 권한으로 로그인되었습니다! (맵 삭제 및 강제 기록 삭제 가능)"
+    )
+    st.divider()
+
+    # --- 관리자 전용 기능: 맵 삭제 ---
+    st.subheader("🗺️ 맵 통째로 삭제 (관리자 전용)")
+    if not data:
+      st.info("삭제할 맵이 없습니다.")
+    else:
+      with st.form("map_delete_form"):
+        target_map_to_delete = st.selectbox(
+            "삭제할 맵 선택", list(data.keys()), key="admin_map_del"
+        )
+        map_delete_submit = st.form_submit_button(label="선택한 맵 통째로 삭제")
+
+        if map_delete_submit:
+          for rec in data[target_map_to_delete]:
+            if (
+                "image_path" in rec
+                and rec["image_path"]
+                and os.path.exists(rec["image_path"])
+            ):
+              os.remove(rec["image_path"])
+
+          del data[target_map_to_delete]
+          save_data(data)
+          st.success(
+              f"🏁 '{target_map_to_delete}' 맵과 관련 기록들이 모두"
+              " 삭제되었습니다!"
+          )
+          st.rerun()
+
+    st.divider()
+
+    # --- 관리자 전용 기능: 강제 기록 삭제 ---
+    st.subheader("⏱️ 특정 기록 강제 삭제 (관리자 전용)")
+    if not data:
+      st.info("등록된 데이터가 없습니다.")
+    else:
+      with st.form("admin_record_delete_form"):
+        selected_map_admin = st.selectbox(
+            "기록이 있는 맵 선택", list(data.keys()), key="admin_rec_map"
+        )
+        if not data[selected_map_admin]:
+          st.write("이 맵에는 등록된 기록이 없습니다.")
+          admin_rec_submit = st.form_submit_button(
+              label="기록 삭제", disabled=True
+          )
+        else:
+          player_list = [rec["player"] for rec in data[selected_map_admin]]
+          selected_player_admin = st.selectbox(
+              "삭제할 플레이어 선택", player_list, key="admin_rec_player"
+          )
+          admin_rec_submit = st.form_submit_button(label="선택한 기록 강제 삭제")
+
+        if admin_rec_submit and data[selected_map_admin]:
+          target_record = None
+          for rec in data[selected_map_admin]:
+            if rec["player"] == selected_player_admin:
+              target_record = rec
+              break
+
+          if target_record:
+            if (
+                "image_path" in target_record
+                and target_record["image_path"]
+                and os.path.exists(target_record["image_path"])
+            ):
+              os.remove(target_record["image_path"])
+
+            data[selected_map_admin].remove(target_record)
+            save_data(data)
+            st.success(
+                f"🗑️ [관리자] '{selected_map_admin}' 맵에서"
+                f" '{selected_player_admin}'님의 기록이 삭제되었습니다!"
+            )
+            st.rerun()
+
   else:
-    if delete_mode == "내 기록 삭제 (일반)":
+    # --- 일반 친구들용 기능: 본인 기록 삭제 ---
+    st.divider()
+    st.subheader("👤 내 기록 삭제 (일반 사용자)")
+    st.write(
+        "본인이 등록했던 이름을 입력하면 해당 맵의 본인 기록만 삭제됩니다."
+    )
+
+    if not data:
+      st.info("등록된 데이터가 없습니다.")
+    else:
       with st.form("my_delete_form"):
         selected_map = st.selectbox(
             "삭제할 기록이 있는 맵 선택", list(data.keys()), key="my_map"
@@ -218,105 +304,3 @@ elif menu == "기록 삭제 (본인/관리자)":
                   f"'{selected_map}' 맵에 '{input_player_name}'님의 기록이"
                   " 존재하지 않습니다."
               )
-
-    elif delete_mode == "관리자 모드로 삭제":
-      password_input = st.text_input(
-          "관리자 비밀번호 입력", type="password", key="admin_pw"
-      )
-
-      if password_input == ADMIN_PASSWORD:
-        st.success("관리자 권한이 확인되었습니다.")
-
-        with st.form("admin_delete_form"):
-          selected_map = st.selectbox(
-              "삭제할 기록이 있는 맵 선택", list(data.keys()), key="admin_map"
-          )
-
-          if not data[selected_map]:
-            st.write("이 맵에는 등록된 기록이 없습니다.")
-            admin_delete_submit = st.form_submit_button(
-                label="기록 삭제", disabled=True
-            )
-          else:
-            player_list = [rec["player"] for rec in data[selected_map]]
-            selected_player = st.selectbox(
-                "삭제할 플레이어 선택", player_list, key="admin_player"
-            )
-            admin_delete_submit = st.form_submit_button(
-                label="선택한 기록 강제 삭제"
-            )
-
-          if admin_delete_submit and data[selected_map]:
-            target_record = None
-            for rec in data[selected_map]:
-              if rec["player"] == selected_player:
-                target_record = rec
-                break
-
-            if target_record:
-              if (
-                  "image_path" in target_record
-                  and target_record["image_path"]
-                  and os.path.exists(target_record["image_path"])
-              ):
-                os.remove(target_record["image_path"])
-
-              data[selected_map].remove(target_record)
-              save_data(data)
-              st.success(
-                  f"🗑️ [관리자] '{selected_map}' 맵에서 '{selected_player}'님의"
-                  " 기록이 삭제되었습니다!"
-              )
-              st.rerun()
-
-      elif password_input != "":
-        st.error("비밀번호가 틀렸습니다.")
-      else:
-        st.info("관리자 권한으로 삭제하려면 비밀번호를 입력해주세요.")
-
-elif menu == "관리자 모드 (맵 삭제)":
-  st.header("🗺️ 관리자 전용 메뉴 (맵 삭제)")
-  st.write(
-      "불필요하거나 잘못 만들어진 맵을 통째로 삭제합니다. (포함된 기록과 사진도"
-      " 함께 삭제됩니다)"
-  )
-
-  map_password_input = st.text_input(
-      "관리자 비밀번호 입력", type="password", key="map_admin_pw"
-  )
-
-  if map_password_input == ADMIN_PASSWORD:
-    st.success("관리자 권한이 확인되었습니다.")
-
-    if not data:
-      st.info("삭제할 맵이 없습니다.")
-    else:
-      with st.form("map_delete_form"):
-        target_map_to_delete = st.selectbox(
-            "삭제할 맵 선택", list(data.keys())
-        )
-        map_delete_submit = st.form_submit_button(label="선택한 맵 통째로 삭제")
-
-        if map_delete_submit:
-          # 해당 맵에 있던 기록들의 인증샷 파일도 모두 삭제
-          for rec in data[target_map_to_delete]:
-            if (
-                "image_path" in rec
-                and rec["image_path"]
-                and os.path.exists(rec["image_path"])
-            ):
-              os.remove(rec["image_path"])
-
-          # 맵 데이터 삭제
-          del data[target_map_to_delete]
-          save_data(data)
-          st.success(
-              f"🏁 '{target_map_to_delete}' 맵과 관련 기록들이 모두"
-              " 삭제되었습니다!"
-          )
-          st.rerun()
-
-  elif map_password_input != "":
-    st.error("비밀번호가 틀렸습니다.")
-  else:
-    st.info("관리자 권한으로 맵을 삭제하려면 비밀번호를 입력해주세요.")

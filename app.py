@@ -9,7 +9,7 @@ if not os.path.exists(IMAGE_DIR):
   os.makedirs(IMAGE_DIR)
 
 # 관리자 비밀번호 설정 (필요시 변경하세요)
-ADMIN_PASSWORD = "1234"
+ADMIN_PASSWORD = "jh0109"
 
 
 def load_data():

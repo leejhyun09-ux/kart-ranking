@@ -9,7 +9,7 @@ if not os.path.exists(IMAGE_DIR):
   os.makedirs(IMAGE_DIR)
 
 # 관리자 비밀번호 설정 (필요시 변경하세요)
-ADMIN_PASSWORD = "0109"
+ADMIN_PASSWORD = "jh0109"
 
 
 def load_data():
@@ -33,7 +33,13 @@ st.write("친구들과 함께 기록과 인증샷을 등록하고 순위를 경�
 
 menu = st.sidebar.selectbox(
     "메뉴 선택",
-    ["전체 순위 보기", "기록 입력", "새 맵 추가", "기록 삭제 (본인/관리자)"],
+    [
+        "전체 순위 보기",
+        "기록 입력",
+        "새 맵 추가",
+        "기록 삭제 (본인/관리자)",
+        "관리자 모드 (맵 삭제)",
+    ],
 )
 
 if menu == "전체 순위 보기":
@@ -165,7 +171,6 @@ elif menu == "기록 삭제 (본인/관리자)":
       " 비밀번호로 전체 삭제)"
   )
 
-  # 삭제 방식 선택 탭
   delete_mode = st.radio(
       "삭제 방식 선택", ["내 기록 삭제 (일반)", "관리자 모드로 삭제"]
   )
@@ -268,3 +273,50 @@ elif menu == "기록 삭제 (본인/관리자)":
         st.error("비밀번호가 틀렸습니다.")
       else:
         st.info("관리자 권한으로 삭제하려면 비밀번호를 입력해주세요.")
+
+elif menu == "관리자 모드 (맵 삭제)":
+  st.header("🗺️ 관리자 전용 메뉴 (맵 삭제)")
+  st.write(
+      "불필요하거나 잘못 만들어진 맵을 통째로 삭제합니다. (포함된 기록과 사진도"
+      " 함께 삭제됩니다)"
+  )
+
+  map_password_input = st.text_input(
+      "관리자 비밀번호 입력", type="password", key="map_admin_pw"
+  )
+
+  if map_password_input == ADMIN_PASSWORD:
+    st.success("관리자 권한이 확인되었습니다.")
+
+    if not data:
+      st.info("삭제할 맵이 없습니다.")
+    else:
+      with st.form("map_delete_form"):
+        target_map_to_delete = st.selectbox(
+            "삭제할 맵 선택", list(data.keys())
+        )
+        map_delete_submit = st.form_submit_button(label="선택한 맵 통째로 삭제")
+
+        if map_delete_submit:
+          # 해당 맵에 있던 기록들의 인증샷 파일도 모두 삭제
+          for rec in data[target_map_to_delete]:
+            if (
+                "image_path" in rec
+                and rec["image_path"]
+                and os.path.exists(rec["image_path"])
+            ):
+              os.remove(rec["image_path"])
+
+          # 맵 데이터 삭제
+          del data[target_map_to_delete]
+          save_data(data)
+          st.success(
+              f"🏁 '{target_map_to_delete}' 맵과 관련 기록들이 모두"
+              " 삭제되었습니다!"
+          )
+          st.rerun()
+
+  elif map_password_input != "":
+    st.error("비밀번호가 틀렸습니다.")
+  else:
+    st.info("관리자 권한으로 맵을 삭제하려면 비밀번호를 입력해주세요.")
